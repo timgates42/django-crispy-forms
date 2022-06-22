@@ -1,12 +1,33 @@
+from __future__ import annotations
+
 from functools import lru_cache
+from typing import Any, Dict, Optional, Union
+
+from typing_extensions import Protocol
 
 from django import template
 from django.conf import settings
+from django.forms import BaseForm
 from django.forms.formsets import BaseFormSet
+from django.http.request import HttpRequest
+from django.template import Context
+from django.template.base import Parser, Token
 from django.template.loader import get_template
+from django.utils.functional import SimpleLazyObject
+from django.utils.safestring import SafeString
 
 from crispy_forms.helper import FormHelper
 from crispy_forms.utils import TEMPLATE_PACK, get_template_pack
+
+
+class _EngineTemplate(Protocol):
+    def render(
+        self,
+        context: Optional[Union[Context, Dict[str, Any]]] = ...,
+        request: Optional[HttpRequest] = ...,
+    ) -> SafeString:
+        ...
+
 
 register = template.Library()
 
@@ -27,7 +48,7 @@ class ForLoopSimulator:
         HTML("{% if forloop.first %}First form text{% endif %}"
     """
 
-    def __init__(self, formset):
+    def __init__(self, formset: BaseFormSet[BaseForm]) -> None:
         self.len_values = len(formset.forms)
 
         # Shortcuts for current loop iteration number.
@@ -40,7 +61,7 @@ class ForLoopSimulator:
         self.first = True
         self.last = 0 == self.len_values - 1
 
-    def iterate(self):
+    def iterate(self) -> None:
         """
         Updates values as if we had iterated over the for
         """
@@ -61,12 +82,12 @@ class BasicNode(template.Node):
     that templates can easily handle.
     """
 
-    def __init__(self, form, helper, template_pack=None):
+    def __init__(self, form: str, helper: Union[str, None], template_pack: Optional[str] = None) -> None:
         self.form = form
         self.helper = helper
         self.template_pack = template_pack or get_template_pack()
 
-    def get_render(self, context):
+    def get_render(self, context: Context) -> Context:
         """
         Returns a `Context` object with all the necessary stuff for rendering the form
 
@@ -84,7 +105,8 @@ class BasicNode(template.Node):
                 template.Variable(self.form),
                 template.Variable(self.helper) if self.helper else None,
             )
-        form, helper = context.render_context[self]
+        # https://github.com/typeddjango/django-stubs/pull/1040
+        form, helper = context.render_context[self]  # type: ignore [index]
 
         actual_form = form.resolve(context)
         if self.helper is not None:
@@ -107,8 +129,9 @@ class BasicNode(template.Node):
         is_formset = isinstance(actual_form, BaseFormSet)
         response_dict = self.get_response_dict(helper, context, is_formset)
         node_context = context.__copy__()
-        node_context.update({"is_bound": actual_form.is_bound})
-        node_context.update(response_dict)
+        # https://github.com/typeddjango/django-stubs/pull/1012
+        node_context.update({"is_bound": actual_form.is_bound})  # type: ignore [attr-defined]
+        node_context.update(response_dict)  # type: ignore [attr-defined]
         final_context = node_context.__copy__()
 
         # If we have a helper's layout we use it, for the form or the formset's forms
@@ -121,8 +144,9 @@ class BasicNode(template.Node):
                 forloop = ForLoopSimulator(actual_form)
                 helper.render_hidden_fields = True
                 for form in actual_form:
-                    node_context.update({"forloop": forloop})
-                    node_context.update({"formset_form": form})
+                    # https://github.com/typeddjango/django-stubs/pull/1012
+                    node_context.update({"forloop": forloop})  # type: ignore [attr-defined]
+                    node_context.update({"formset_form": form})  # type: ignore [attr-defined]
                     form.form_html = helper.render_layout(form, node_context, template_pack=self.template_pack)
                     forloop.iterate()
 
@@ -131,9 +155,10 @@ class BasicNode(template.Node):
         else:
             final_context["form"] = actual_form
 
-        return final_context
+        # https://github.com/typeddjango/django-stubs/pull/1012
+        return final_context  # type: ignore [return-value]
 
-    def get_response_dict(self, helper, context, is_formset):
+    def get_response_dict(self, helper: FormHelper, context: Context, is_formset: bool) -> Dict[str, Union[str, bool]]:
         """
         Returns a dictionary with all the parameters necessary to render the form/formset in a template.
 
@@ -185,17 +210,17 @@ class BasicNode(template.Node):
 
 
 @lru_cache()
-def whole_uni_formset_template(template_pack=TEMPLATE_PACK):
+def whole_uni_formset_template(template_pack: Union[str, SimpleLazyObject] = TEMPLATE_PACK) -> _EngineTemplate:
     return get_template("%s/whole_uni_formset.html" % template_pack)
 
 
 @lru_cache()
-def whole_uni_form_template(template_pack=TEMPLATE_PACK):
+def whole_uni_form_template(template_pack: Union[str, SimpleLazyObject] = TEMPLATE_PACK) -> _EngineTemplate:
     return get_template("%s/whole_uni_form.html" % template_pack)
 
 
 class CrispyFormNode(BasicNode):
-    def render(self, context):
+    def render(self, context: Context) -> SafeString:
         c = self.get_render(context).flatten()
 
         if self.actual_helper is not None and getattr(self.actual_helper, "template", False):
@@ -210,7 +235,7 @@ class CrispyFormNode(BasicNode):
 
 # {% crispy %} tag
 @register.tag(name="crispy")
-def do_uni_form(parser, token):
+def do_uni_form(parser: Parser, token: Token) -> CrispyFormNode:
     """
     You need to pass in at least the form/formset object, and can also pass in the
     optional `crispy_forms.helpers.FormHelper` object.

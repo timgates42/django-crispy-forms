@@ -1,3 +1,11 @@
+from __future__ import annotations
+
+from types import TracebackType
+from typing import Collection, Union
+
+from django.template import Context
+
+
 class KeepContext:
     """
     Context manager that receives a `django.template.Context` instance and a list of keys
@@ -9,14 +17,19 @@ class KeepContext:
     touch context object themselves, that could introduce side effects.
     """
 
-    def __init__(self, context, keys):
+    def __init__(self, context: Context, keys: Collection[str]) -> None:
         self.context = context
         self.keys = keys
 
-    def __enter__(self):
+    def __enter__(self) -> None:
         pass
 
-    def __exit__(self, type, value, traceback):
+    def __exit__(
+        self,
+        type: Union[type[BaseException], None],
+        value: Union[BaseException, None],
+        traceback: Union[TracebackType, None],
+    ) -> None:
         for key in list(self.keys):
             if key in self.context:
                 del self.context[key]

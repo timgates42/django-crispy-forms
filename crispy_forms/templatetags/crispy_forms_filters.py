@@ -1,24 +1,29 @@
+from __future__ import annotations
+
 from functools import lru_cache
+from typing import Any, Dict, Optional, Tuple, Union
 
 from django import template
 from django.conf import settings
-from django.forms import boundfield
+from django.forms import BaseForm, BoundField
 from django.forms.formsets import BaseFormSet
-from django.template import Context
+from django.template import Context, TemplateDoesNotExist
+from django.template.backends.django import Template  # type: ignore [attr-defined] # django-stubs/994
 from django.template.loader import get_template
-from django.utils.safestring import mark_safe
+from django.utils.functional import SimpleLazyObject
+from django.utils.safestring import SafeString, mark_safe
 
 from crispy_forms.exceptions import CrispyError
 from crispy_forms.utils import TEMPLATE_PACK, flatatt
 
 
 @lru_cache()
-def uni_formset_template(template_pack=TEMPLATE_PACK):
+def uni_formset_template(template_pack: Union[str, SimpleLazyObject] = TEMPLATE_PACK) -> Template:
     return get_template("%s/uni_formset.html" % template_pack)
 
 
 @lru_cache()
-def uni_form_template(template_pack=TEMPLATE_PACK):
+def uni_form_template(template_pack: Union[str, SimpleLazyObject] = TEMPLATE_PACK) -> Template:
     return get_template("%s/uni_form.html" % template_pack)
 
 
@@ -26,7 +31,12 @@ register = template.Library()
 
 
 @register.filter(name="crispy")
-def as_crispy_form(form, template_pack=TEMPLATE_PACK, label_class="", field_class=""):
+def as_crispy_form(
+    form: Union[BaseFormSet[BaseForm], BaseForm],
+    template_pack: Union[str, SimpleLazyObject] = TEMPLATE_PACK,
+    label_class: str = "",
+    field_class: str = "",
+) -> SafeString:
     """
     The original and still very useful way to generate a div elegant form/formset::
 
@@ -45,7 +55,7 @@ def as_crispy_form(form, template_pack=TEMPLATE_PACK, label_class="", field_clas
 
         {{ myform|label_class:"col-lg-2",field_class:"col-lg-8" }}
     """
-    c = Context(
+    c: Dict[str, Any] = Context(
         {
             "field_class": field_class,
             "field_template": "%s/field.html" % template_pack,
@@ -65,7 +75,10 @@ def as_crispy_form(form, template_pack=TEMPLATE_PACK, label_class="", field_clas
 
 
 @register.filter(name="as_crispy_errors")
-def as_crispy_errors(form, template_pack=TEMPLATE_PACK):
+def as_crispy_errors(
+    form: Union[BaseFormSet[BaseForm], BaseForm],
+    template_pack: Union[str, SimpleLazyObject] = TEMPLATE_PACK,
+) -> Union[SafeString, TemplateDoesNotExist]:
     """
     Renders only form errors the same way as django-crispy-forms::
 
@@ -87,7 +100,12 @@ def as_crispy_errors(form, template_pack=TEMPLATE_PACK):
 
 
 @register.filter(name="as_crispy_field")
-def as_crispy_field(field, template_pack=TEMPLATE_PACK, label_class="", field_class=""):
+def as_crispy_field(
+    field: BoundField,
+    template_pack: Union[SimpleLazyObject, str] = TEMPLATE_PACK,
+    label_class: str = "",
+    field_class: str = "",
+) -> Union[SafeString, TemplateDoesNotExist]:
     """
     Renders a form field like a django-crispy-forms field::
 
@@ -98,7 +116,9 @@ def as_crispy_field(field, template_pack=TEMPLATE_PACK, label_class="", field_cl
 
         {{ form.field|as_crispy_field:"bootstrap4" }}
     """
-    if not isinstance(field, boundfield.BoundField) and settings.DEBUG:
+    # Type of field arg is BoundField, which is what we expect. The check below
+    # raises an exception if that's not the case.
+    if not isinstance(field, BoundField) and settings.DEBUG:  # type: ignore [unreachable]
         raise CrispyError("|as_crispy_field got passed an invalid or inexistent field")
 
     attributes = {
@@ -123,12 +143,12 @@ def as_crispy_field(field, template_pack=TEMPLATE_PACK, label_class="", field_cl
 
 
 @register.filter(name="flatatt")
-def flatatt_filter(attrs):
+def flatatt_filter(attrs: dict[str, str]) -> SafeString:
     return mark_safe(flatatt(attrs))
 
 
 @register.filter
-def optgroups(field):
+def optgroups(field: BoundField) -> Tuple[Optional[str], Dict[str, Union[str, bool, int, Dict[str, str]]], int]:
     """
     A template filter to help rendering of fields with optgroups.
 
